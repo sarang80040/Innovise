@@ -23,9 +23,9 @@ class MetricsTracker:
         self.last_election_duration_sec: Optional[float] = None
         self.election_start_time: Optional[float] = None
 
-        # Time-series history for charts (capped at 60 points)
+        # Time-series history for charts (retains up to 1800 points = 30 minutes of history)
         self.chart_history: List[Dict[str, Any]] = []
-        self.max_chart_points: int = 60
+        self.max_chart_points: int = 1800
         self.last_chart_record_time: float = 0.0
 
     def record_election_start(self) -> None:

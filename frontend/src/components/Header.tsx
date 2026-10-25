@@ -9,10 +9,20 @@ import {
   PlusCircle,
   Link2,
   BookOpen,
+  Send,
+  Check,
+  X,
 } from 'lucide-react';
 import { ClusterStatus } from '../types';
 import { api } from '../services/api';
 import { JudgeGuideModal } from './JudgeGuideModal';
+
+const PRESET_TEMPLATES = [
+  { name: 'Token Transfer', payload: 'Transfer 25 TOKENS to Alice', origin: 'Wallet-0xAlice', icon: '💸' },
+  { name: 'Governance Vote', payload: 'Vote YES on Proposal #42', origin: 'DAO-Governor', icon: '🏛️' },
+  { name: 'Smart Contract', payload: 'Execute contract 0xDeFi::swap(100 USDT -> ETH)', origin: 'DEX-Router', icon: '⚡' },
+  { name: 'Mint NFT', payload: 'Mint NFT #1024 to 0xBob', origin: 'NFT-Portal', icon: '🎨' },
+];
 
 interface HeaderProps {
   cluster: ClusterStatus | null;
@@ -31,8 +41,27 @@ export const Header: React.FC<HeaderProps> = ({
   const [healing, setHealing] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [headerBatchCount, setHeaderBatchCount] = useState<number>(10);
-  const [simulatingBatch, setSimulatingBatch] = useState<boolean>(false);
+  const [simulatingBatch, setSimulatingBatch] = useState(false);
   const [headerFeedback, setHeaderFeedback] = useState<string | null>(null);
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [manualPayload, setManualPayload] = useState('Transfer 50 TOKENS to Alice');
+  const [manualOrigin, setManualOrigin] = useState('Client-Portal');
+  const [submittingManual, setSubmittingManual] = useState(false);
+
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualPayload.trim()) return;
+    setSubmittingManual(true);
+    try {
+      await api.submitTransaction(manualPayload, manualOrigin);
+      onRefresh();
+      setIsManualModalOpen(false); // Closes popup immediately upon Submit to Leader
+    } catch (err) {
+      console.error('Failed submitting manual tx:', err);
+    } finally {
+      setSubmittingManual(false);
+    }
+  };
 
   const handleHeaderSimulateBatch = async () => {
     if (headerBatchCount < 1 || headerBatchCount > 100) return;
@@ -167,15 +196,119 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Judge Guide</span>
           </button>
 
-          {/* Submit Tx Button */}
-          <button
-            onClick={onOpenTxModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-blue hover:bg-blue-600 text-white transition-all shadow-md shadow-brand-blue/20"
-            title="Open manual transaction submission dialog"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>Manual Tx</span>
-          </button>
+          {/* Manual Tx Button with Anchored Popup */}
+          <div className="relative">
+            <button
+              onClick={() => setIsManualModalOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-blue hover:bg-blue-600 text-white transition-all shadow-md shadow-brand-blue/20"
+              title="Open manual transaction submission dialog"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Manual Tx</span>
+            </button>
+
+            {/* Popup right near the button */}
+            {isManualModalOpen && (
+              <>
+                {/* Click-away backdrop */}
+                <div
+                  className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]"
+                  onClick={() => setIsManualModalOpen(false)}
+                />
+
+                {/* Popover anchored directly below the button, opening towards the right */}
+                <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)] bg-dark-800 border border-dark-600 rounded-xl p-4 shadow-2xl z-50 space-y-3.5">
+                  {/* Subtle top pointer arrow pointing up to the Manual Tx button */}
+                  <div className="absolute -top-1.5 left-6 w-3 h-3 bg-dark-800 border-t border-l border-dark-600 rotate-45" />
+
+                  <div className="flex items-center justify-between border-b border-dark-700 pb-2.5 relative z-10">
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <Send className="w-3.5 h-3.5 text-brand-blue" />
+                      Manual Consensus Transaction
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setIsManualModalOpen(false)}
+                      className="text-slate-400 hover:text-white text-xs p-1 rounded hover:bg-dark-700 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* 1-Click Quick Presets */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-400 font-semibold block uppercase">Quick Presets:</span>
+                    <div className="grid grid-cols-2 gap-1.5 text-xs">
+                      {PRESET_TEMPLATES.map((p, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setManualPayload(p.payload);
+                            setManualOrigin(p.origin);
+                          }}
+                          className="p-1.5 rounded-lg bg-dark-900 border border-dark-700 hover:border-cyan-500/60 text-left transition-all group"
+                        >
+                          <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-200 group-hover:text-cyan-300">
+                            <span>{p.icon}</span>
+                            <span>{p.name}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Form */}
+                  <form onSubmit={handleManualSubmit} className="space-y-2.5 text-xs">
+                    <div>
+                      <label className="text-[11px] text-slate-300 block mb-1 font-semibold">
+                        Transaction Payload:
+                      </label>
+                      <input
+                        type="text"
+                        value={manualPayload}
+                        onChange={(e) => setManualPayload(e.target.value)}
+                        placeholder="e.g. Transfer 50 Tokens to Alice"
+                        required
+                        className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-blue font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] text-slate-300 block mb-1 font-semibold">
+                        Originating Source / Client:
+                      </label>
+                      <input
+                        type="text"
+                        value={manualOrigin}
+                        onChange={(e) => setManualOrigin(e.target.value)}
+                        placeholder="e.g. Web-Client-Portal"
+                        className="w-full bg-dark-900 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-blue"
+                      />
+                    </div>
+
+                    <div className="pt-1.5 flex items-center justify-end gap-2 border-t border-dark-700">
+                      <button
+                        type="button"
+                        onClick={() => setIsManualModalOpen(false)}
+                        className="px-3 py-1 rounded-lg text-xs text-slate-300 hover:text-white bg-dark-700 border border-dark-600"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submittingManual}
+                        className="px-3.5 py-1 rounded-lg text-xs font-bold bg-brand-blue hover:bg-blue-600 text-white shadow-md flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Send className={`w-3 h-3 ${submittingManual ? 'animate-spin' : ''}`} />
+                        <span>{submittingManual ? 'Submitting...' : 'Submit to Leader'}</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Quick Simultaneous Batch Simulator (1-100) in Header */}
           <div className="flex items-center gap-1.5 bg-dark-900 border border-brand-blue/40 rounded-lg p-1 shadow-inner">
