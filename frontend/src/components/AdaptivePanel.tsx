@@ -59,6 +59,25 @@ export const AdaptivePanel: React.FC<AdaptivePanelProps> = ({
     }
   };
 
+  const getDisplayClassification = (cls: string) => {
+    switch (cls) {
+      case 'HEALTHY':
+        return 'Healthy';
+      case 'HIGH_LATENCY':
+        return 'High Latency';
+      case 'HIGH_LOSS':
+        return 'High Loss';
+      case 'SEVERELY_DEGRADED':
+        return 'Severely Degraded';
+      case 'PARTITIONED':
+        return 'Partitioned';
+      case 'QUORUM_LOST':
+        return 'Quorum Lost';
+      default:
+        return cls ? cls.replace(/_/g, ' ') : 'Unknown';
+    }
+  };
+
   return (
     <div className="bg-dark-800/80 border border-dark-700 rounded-xl p-5 shadow-lg backdrop-blur-sm">
       {/* Header */}
@@ -97,50 +116,65 @@ export const AdaptivePanel: React.FC<AdaptivePanelProps> = ({
       </div>
 
       {/* Main Grid: Status & Active Parameters */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
         {/* Classification */}
-        <div className="p-3 rounded-lg bg-dark-900/60 border border-dark-700 flex flex-col justify-between">
-          <span className="text-slate-400 text-[10px] uppercase font-semibold">Network State</span>
-          <div className="my-1">
+        <div className="p-3 rounded-lg bg-dark-900/60 border border-dark-700 flex flex-col justify-between min-w-0">
+          <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider">Network State</span>
+          <div className="my-1.5 flex items-start min-w-0 w-full">
             <span
-              className={`inline-block px-2.5 py-1 rounded-md text-xs font-bold border tracking-wide ${getBadgeColor(
+              className={`inline-flex items-start gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border tracking-wide whitespace-normal break-words leading-tight max-w-full ${getBadgeColor(
                 classification
               )}`}
             >
-              {classification}
+              <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0 animate-pulse mt-1" />
+              <span className="break-words whitespace-normal min-w-0 leading-tight">
+                {getDisplayClassification(classification)}
+              </span>
             </span>
           </div>
           <span className="text-[10px] text-slate-500 font-mono">Live evaluation</span>
         </div>
 
         {/* Heartbeat Interval */}
-        <div className="p-3 rounded-lg bg-dark-900/60 border border-dark-700">
-          <span className="text-slate-400 text-[10px] uppercase font-semibold">Heartbeat Interval</span>
-          <div className="text-lg font-bold font-mono text-cyan-400 my-0.5 flex items-baseline gap-1">
-            {timeouts.heartbeat_interval_sec.toFixed(2)}
+        <div className="p-3 rounded-lg bg-dark-900/60 border border-dark-700 min-w-0 flex flex-col justify-between">
+          <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider whitespace-normal break-words leading-tight">
+            Heartbeat Interval
+          </span>
+          <div className="text-lg font-bold font-mono text-cyan-400 my-0.5 flex items-baseline flex-wrap gap-1 whitespace-normal break-words leading-tight">
+            <span>{timeouts.heartbeat_interval_sec.toFixed(2)}</span>
             <span className="text-xs font-sans text-slate-500 font-normal">sec</span>
           </div>
-          <span className="text-[10px] text-slate-500">Leader ping frequency</span>
+          <span className="text-[10px] text-slate-500 whitespace-normal break-words leading-tight">
+            Leader ping frequency
+          </span>
         </div>
 
         {/* Min Election Timeout */}
-        <div className="p-3 rounded-lg bg-dark-900/60 border border-dark-700">
-          <span className="text-slate-400 text-[10px] uppercase font-semibold">Min Election Timeout</span>
-          <div className="text-lg font-bold font-mono text-purple-400 my-0.5 flex items-baseline gap-1">
-            {timeouts.election_min_sec.toFixed(2)}
+        <div className="p-3 rounded-lg bg-dark-900/60 border border-dark-700 min-w-0 flex flex-col justify-between">
+          <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider whitespace-normal break-words leading-tight">
+            Min Election Timeout
+          </span>
+          <div className="text-lg font-bold font-mono text-purple-400 my-0.5 flex items-baseline flex-wrap gap-1 whitespace-normal break-words leading-tight">
+            <span>{timeouts.election_min_sec.toFixed(2)}</span>
             <span className="text-xs font-sans text-slate-500 font-normal">sec</span>
           </div>
-          <span className="text-[10px] text-slate-500">Lower election jitter bound</span>
+          <span className="text-[10px] text-slate-500 whitespace-normal break-words leading-tight">
+            Lower jitter bound
+          </span>
         </div>
 
         {/* Max Election Timeout */}
-        <div className="p-3 rounded-lg bg-dark-900/60 border border-dark-700">
-          <span className="text-slate-400 text-[10px] uppercase font-semibold">Max Election Timeout</span>
-          <div className="text-lg font-bold font-mono text-amber-400 my-0.5 flex items-baseline gap-1">
-            {timeouts.election_max_sec.toFixed(2)}
+        <div className="p-3 rounded-lg bg-dark-900/60 border border-dark-700 min-w-0 flex flex-col justify-between">
+          <span className="text-slate-400 text-[10px] uppercase font-semibold tracking-wider whitespace-normal break-words leading-tight">
+            Max Election Timeout
+          </span>
+          <div className="text-lg font-bold font-mono text-amber-400 my-0.5 flex items-baseline flex-wrap gap-1 whitespace-normal break-words leading-tight">
+            <span>{timeouts.election_max_sec.toFixed(2)}</span>
             <span className="text-xs font-sans text-slate-500 font-normal">sec</span>
           </div>
-          <span className="text-[10px] text-slate-500">Upper election jitter bound</span>
+          <span className="text-[10px] text-slate-500 whitespace-normal break-words leading-tight">
+            Upper jitter bound
+          </span>
         </div>
       </div>
 
@@ -165,15 +199,16 @@ export const AdaptivePanel: React.FC<AdaptivePanelProps> = ({
                 key={idx}
                 className="p-2.5 rounded bg-dark-800 border border-dark-700 text-xs flex flex-col gap-1"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded ${getBadgeColor(
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded whitespace-normal break-words leading-tight ${getBadgeColor(
                       dec.classification
                     )}`}
+                    title={dec.classification}
                   >
-                    {dec.classification}
+                    {getDisplayClassification(dec.classification)}
                   </span>
-                  <span className="font-mono text-[10px] text-slate-500">{dec.time_str}</span>
+                  <span className="font-mono text-[10px] text-slate-500 shrink-0">{dec.time_str}</span>
                 </div>
                 <p className="text-slate-300 text-[11px] leading-relaxed">{dec.reason}</p>
                 <div className="flex items-center gap-3 text-[10px] font-mono text-slate-400 pt-1 border-t border-dark-700">

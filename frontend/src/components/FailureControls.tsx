@@ -16,6 +16,9 @@ import {
   Radio,
   X,
   Sparkles,
+  Send,
+  PlusCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { NetworkConfig, ValidatorState } from '../types';
 import { api } from '../services/api';
@@ -105,13 +108,20 @@ const BYZANTINE_FAULT_TYPES = [
   },
 ];
 
+const QUICK_TX_PRESETS = [
+  { name: 'Transfer 50 TOKENS', payload: 'Transfer 50 TOKENS to Bob', origin: 'Simulator-Wallet' },
+  { name: 'DEX Swap', payload: 'Execute contract 0xDeFi::swap(100 USDT -> ETH)', origin: 'DEX-Router' },
+  { name: 'Mint NFT #1024', payload: 'Mint NFT #1024 to 0xAlice', origin: 'NFT-Portal' },
+  { name: 'Vote Proposal #7', payload: 'Vote YES on Governance Proposal #7', origin: 'DAO-Gov' },
+];
+
 export const FailureControls: React.FC<FailureControlsProps> = ({
   validators,
   currentNetworkConfig,
   isPartitioned,
   onRefresh,
 }) => {
-  const [activeTab, setActiveTab] = useState<'network' | 'partition' | 'malicious'>('network');
+  const [activeTab, setActiveTab] = useState<'network' | 'partition' | 'malicious' | 'transactions'>('network');
 
   // Latency & Loss state
   const [latency, setLatency] = useState<number>(currentNetworkConfig.latency_ms);
@@ -122,6 +132,17 @@ export const FailureControls: React.FC<FailureControlsProps> = ({
   const [latencyError, setLatencyError] = useState<string | null>(null);
   const [dropError, setDropError] = useState<string | null>(null);
 
+  // Simultaneous Batch Simulation & Manual Transaction state
+  const [simBatchCount, setSimBatchCount] = useState<number>(10);
+  const [simulatingBatch, setSimulatingBatch] = useState<boolean>(false);
+  const [batchFeedback, setBatchFeedback] = useState<string | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
+
+  const [manualPayload, setManualPayload] = useState<string>('Transfer 25 TOKENS to Alice');
+  const [manualOrigin, setManualOrigin] = useState<string>('Simulator-Console');
+  const [submittingManual, setSubmittingManual] = useState<boolean>(false);
+  const [manualFeedback, setManualFeedback] = useState<string | null>(null);
+
   // Partition groups state
   const [partitionGroupA, setPartitionGroupA] = useState<string[]>(['V1', 'V2', 'V3']);
   const [partitionGroupB, setPartitionGroupB] = useState<string[]>(['V4', 'V5']);
@@ -131,6 +152,44 @@ export const FailureControls: React.FC<FailureControlsProps> = ({
   const [targetValidator, setTargetValidator] = useState<string>('V5');
   const [faultType, setFaultType] = useState<string>('conflict_entry');
   const [injecting, setInjecting] = useState<boolean>(false);
+
+  const handleSimulateBatch = async () => {
+    if (simBatchCount < 1 || simBatchCount > 100) {
+      setBatchError('Count must be 1-100');
+      return;
+    }
+    setBatchError(null);
+    setSimulatingBatch(true);
+    setBatchFeedback(`Dispatching ${simBatchCount} simultaneous tx...`);
+    try {
+      const res = await api.submitBatchTransactions(simBatchCount);
+      setBatchFeedback(`✓ Dispatched ${res.submitted} simultaneous transactions!`);
+      onRefresh();
+      setTimeout(() => setBatchFeedback(null), 4000);
+    } catch (err: any) {
+      setBatchFeedback(`Error: ${err.message || 'Simulation failed'}`);
+    } finally {
+      setSimulatingBatch(false);
+    }
+  };
+
+  const handleManualSubmit = async (customPayload?: string, customOrigin?: string) => {
+    const payload = customPayload || manualPayload;
+    const origin = customOrigin || manualOrigin;
+    if (!payload.trim()) return;
+    setSubmittingManual(true);
+    setManualFeedback('Submitting transaction...');
+    try {
+      const res = await api.submitTransaction(payload, origin);
+      setManualFeedback(`✓ Submitted tx ${res.tx_id.slice(0, 10)}... (${res.status})`);
+      onRefresh();
+      setTimeout(() => setManualFeedback(null), 4000);
+    } catch (err: any) {
+      setManualFeedback(`Error: ${err.message || 'Submission failed'}`);
+    } finally {
+      setSubmittingManual(false);
+    }
+  };
 
   // Apply network latency & drops
   const handleApplyNetwork = async (newLatency: number, newDropPct: number) => {
@@ -283,7 +342,7 @@ export const FailureControls: React.FC<FailureControlsProps> = ({
         </div>
 
         {/* Tab switch */}
-        <div className="flex bg-dark-900 p-1 rounded-lg border border-dark-700 text-xs">
+        <div className="flex flex-wrap bg-dark-900 p-1 rounded-lg border border-dark-700 text-xs gap-1">
           <button
             onClick={() => setActiveTab('network')}
             className={`px-3 py-1 rounded-md font-medium transition-all ${
@@ -313,6 +372,17 @@ export const FailureControls: React.FC<FailureControlsProps> = ({
             }`}
           >
             Byzantine Faults {maliciousValidators.length > 0 ? `(${maliciousValidators.length})` : ''}
+          </button>
+          <button
+            onClick={() => setActiveTab('transactions')}
+            className={`px-3 py-1 rounded-md font-medium transition-all flex items-center gap-1.5 ${
+              activeTab === 'transactions'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Simulate Tx (1-100)</span>
           </button>
         </div>
       </div>
@@ -504,6 +574,67 @@ export const FailureControls: React.FC<FailureControlsProps> = ({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Quick Concurrent Load Generator (1 - 100 Tx) right under Latency & Drops */}
+          <div className="p-3.5 rounded-lg bg-dark-900/80 border border-brand-blue/30 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                Simulate Concurrent Transactions (1 - 100 Tx):
+              </span>
+              {batchFeedback && (
+                <span className="text-xs font-mono font-medium text-emerald-300 bg-emerald-950/60 px-2.5 py-0.5 rounded border border-emerald-500/30">
+                  {batchFeedback}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-1 bg-dark-800 border border-dark-600 rounded-lg px-2.5 py-1 focus-within:border-brand-blue">
+                <span className="text-[11px] text-slate-400 font-semibold">Count:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={simBatchCount}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setSimBatchCount(isNaN(v) ? 1 : Math.max(1, Math.min(100, v)));
+                    setBatchError(null);
+                  }}
+                  className="w-14 bg-transparent text-xs text-slate-100 font-mono font-bold focus:outline-none text-center"
+                />
+                <span className="text-[10px] text-slate-500 font-mono">Tx</span>
+              </div>
+              <div className="flex items-center gap-1">
+                {[5, 10, 25, 50, 100].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      setSimBatchCount(c);
+                      setBatchError(null);
+                    }}
+                    className={`px-2 py-1 rounded text-[11px] font-mono font-semibold transition-all ${
+                      simBatchCount === c
+                        ? 'bg-brand-blue text-white shadow'
+                        : 'bg-dark-800 border border-dark-700 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleSimulateBatch}
+                disabled={simulatingBatch}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow transition-all flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Play className={`w-3.5 h-3.5 ${simulatingBatch ? 'animate-spin' : ''}`} />
+                <span>{simulatingBatch ? `Simulating ${simBatchCount}...` : `Simulate ${simBatchCount} Simultaneous Tx`}</span>
+              </button>
+            </div>
+            {batchError && <span className="text-[10px] text-rose-400 font-sans block">{batchError}</span>}
           </div>
         </div>
       )}
@@ -766,6 +897,165 @@ export const FailureControls: React.FC<FailureControlsProps> = ({
               <p>
                 Raft is mathematically proven for <strong>Crash Fault Tolerance (CFT)</strong>. It tolerates up to 2 silent crashing nodes in a 5-node cluster. If a validator deliberately lies (fabricates ACKs or signs conflicting terms), the Consistency Auditor quarantines the rogue entry without breaking quorum consistency.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: Simultaneous Batch Simulation & Manual Transaction Submission */}
+      {activeTab === 'transactions' && (
+        <div className="space-y-4">
+          {/* Section 1: Simultaneous Batch Simulation (1-100) */}
+          <div className="p-4 rounded-lg bg-dark-900/90 border border-brand-blue/40 shadow-inner space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-brand-blue/20 border border-brand-blue/40 text-brand-blue">
+                  <Zap className="w-4 h-4 animate-pulse text-cyan-400" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    Simultaneous Batch Simulator
+                    <span className="text-[10px] font-mono px-2 py-0.2 rounded bg-brand-blue/20 text-brand-blue border border-brand-blue/30">
+                      1 - 100 Concurrent Tx
+                    </span>
+                  </span>
+                  <p className="text-[11px] text-slate-400">
+                    Specify count (1-100). The system generates unique IDs (tx-[hex]) and diverse payloads submitted in parallel.
+                  </p>
+                </div>
+              </div>
+
+              {batchFeedback && (
+                <span className="text-xs font-medium px-2.5 py-1 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-mono">
+                  {batchFeedback}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              {/* User Input field (1-100) */}
+              <div className="flex items-center gap-1.5 bg-dark-800 border border-dark-600 rounded-lg px-2.5 py-1 focus-within:border-brand-blue">
+                <span className="text-[11px] text-slate-400 font-semibold">Count:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={simBatchCount}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setSimBatchCount(isNaN(v) ? 1 : Math.max(1, Math.min(100, v)));
+                    setBatchError(null);
+                  }}
+                  className="w-14 bg-transparent text-xs text-slate-100 font-mono font-bold focus:outline-none text-center"
+                />
+                <span className="text-[10px] text-slate-500 font-mono">Tx</span>
+              </div>
+
+              {/* Quick preset pills */}
+              <div className="flex items-center gap-1">
+                {[5, 10, 25, 50, 100].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      setSimBatchCount(c);
+                      setBatchError(null);
+                    }}
+                    className={`px-2.5 py-1 rounded text-[11px] font-mono font-semibold transition-all ${
+                      simBatchCount === c
+                        ? 'bg-brand-blue text-white shadow'
+                        : 'bg-dark-800 border border-dark-700 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+
+              {/* Execution Button */}
+              <button
+                onClick={handleSimulateBatch}
+                disabled={simulatingBatch}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Play className={`w-3.5 h-3.5 ${simulatingBatch ? 'animate-spin' : ''}`} />
+                <span>{simulatingBatch ? `Simulating ${simBatchCount} Tx...` : `Simulate ${simBatchCount} Simultaneous Tx`}</span>
+              </button>
+            </div>
+            {batchError && <span className="text-[10px] text-rose-400 block">{batchError}</span>}
+          </div>
+
+          {/* Section 2: Manual Transaction Input & 1-Click Templates */}
+          <div className="p-4 rounded-lg bg-dark-900/90 border border-dark-700 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Send className="w-3.5 h-3.5 text-brand-blue" />
+                Manual Transaction Input
+              </span>
+              {manualFeedback && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-mono">
+                  {manualFeedback}
+                </span>
+              )}
+            </div>
+
+            {/* 1-Click Template presets */}
+            <div className="space-y-1">
+              <span className="text-[11px] text-slate-400 font-semibold block">1-Click Quick Templates:</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {QUICK_TX_PRESETS.map((p, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setManualPayload(p.payload);
+                      setManualOrigin(p.origin);
+                      handleManualSubmit(p.payload, p.origin);
+                    }}
+                    disabled={submittingManual}
+                    className="p-2 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600 hover:border-cyan-500/50 text-left transition-all text-xs group"
+                  >
+                    <span className="font-semibold text-slate-200 block text-[11px] group-hover:text-cyan-300">
+                      ⚡ {p.name}
+                    </span>
+                    <span className="text-[9px] text-slate-500 truncate block">{p.payload}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Input Form */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <div className="sm:col-span-2">
+                <label className="text-[11px] text-slate-400 block mb-1">Transaction Payload:</label>
+                <input
+                  type="text"
+                  value={manualPayload}
+                  onChange={(e) => setManualPayload(e.target.value)}
+                  placeholder="e.g. Transfer 50 Tokens to Bob"
+                  className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-brand-blue"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">Origin Client:</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualOrigin}
+                    onChange={(e) => setManualOrigin(e.target.value)}
+                    placeholder="Client-Portal"
+                    className="w-full bg-dark-800 border border-dark-600 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-blue"
+                  />
+                  <button
+                    onClick={() => handleManualSubmit()}
+                    disabled={submittingManual || !manualPayload.trim()}
+                    className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-brand-blue hover:bg-blue-600 text-white shadow transition-all shrink-0 flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>Submit</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

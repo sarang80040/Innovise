@@ -43,10 +43,10 @@ export const MetricsCharts: React.FC<MetricsChartsProps> = ({ metrics, charts })
         </div>
 
         {/* Tab switch */}
-        <div className="flex bg-dark-900 p-1 rounded-lg border border-dark-700 text-xs">
+        <div className="flex flex-wrap bg-dark-900 p-1 rounded-lg border border-dark-700 text-xs gap-1">
           <button
             onClick={() => setActiveMetric('tps')}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
+            className={`px-3 py-1 rounded-md font-medium transition-all whitespace-normal break-words leading-tight ${
               activeMetric === 'tps'
                 ? 'bg-brand-blue text-white shadow'
                 : 'text-slate-400 hover:text-white'
@@ -56,7 +56,7 @@ export const MetricsCharts: React.FC<MetricsChartsProps> = ({ metrics, charts })
           </button>
           <button
             onClick={() => setActiveMetric('latency')}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
+            className={`px-3 py-1 rounded-md font-medium transition-all whitespace-normal break-words leading-tight ${
               activeMetric === 'latency'
                 ? 'bg-brand-blue text-white shadow'
                 : 'text-slate-400 hover:text-white'
@@ -66,7 +66,7 @@ export const MetricsCharts: React.FC<MetricsChartsProps> = ({ metrics, charts })
           </button>
           <button
             onClick={() => setActiveMetric('nodes')}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
+            className={`px-3 py-1 rounded-md font-medium transition-all whitespace-normal break-words leading-tight ${
               activeMetric === 'nodes'
                 ? 'bg-brand-blue text-white shadow'
                 : 'text-slate-400 hover:text-white'
@@ -76,7 +76,7 @@ export const MetricsCharts: React.FC<MetricsChartsProps> = ({ metrics, charts })
           </button>
           <button
             onClick={() => setActiveMetric('drops')}
-            className={`px-3 py-1 rounded-md font-medium transition-all ${
+            className={`px-3 py-1 rounded-md font-medium transition-all whitespace-normal break-words leading-tight ${
               activeMetric === 'drops'
                 ? 'bg-brand-blue text-white shadow'
                 : 'text-slate-400 hover:text-white'
@@ -90,69 +90,97 @@ export const MetricsCharts: React.FC<MetricsChartsProps> = ({ metrics, charts })
       {/* KPI Cards Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Throughput */}
-        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700">
-          <span className="text-[10px] text-slate-400 font-semibold uppercase block">Throughput</span>
-          <div className="text-lg font-bold font-mono text-cyan-400 my-0.5">
-            {metrics?.throughput_tps ?? 0}{' '}
+        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700 min-w-0 flex flex-col justify-between">
+          <span className="text-[10px] text-slate-400 font-semibold uppercase block whitespace-normal break-words leading-tight">
+            Throughput
+          </span>
+          <div className="text-lg font-bold font-mono text-cyan-400 my-0.5 whitespace-normal break-words leading-tight flex items-baseline flex-wrap gap-1">
+            <span>{metrics?.throughput_tps ?? 0}</span>
             <span className="text-[10px] font-sans text-slate-500 font-normal">tps</span>
           </div>
-          <span className="text-[10px] text-slate-500">10s sliding window</span>
+          <span className="text-[10px] text-slate-500 whitespace-normal break-words leading-tight">
+            10s sliding window
+          </span>
         </div>
 
         {/* Confirmation Latency */}
-        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700">
-          <span className="text-[10px] text-slate-400 font-semibold uppercase block">Avg Latency</span>
-          <div className="text-lg font-bold font-mono text-emerald-400 my-0.5">
-            {metrics?.avg_latency_ms !== null && metrics?.avg_latency_ms !== undefined
-              ? `${metrics.avg_latency_ms} ms`
-              : 'N/A'}
+        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700 min-w-0 flex flex-col justify-between">
+          <span className="text-[10px] text-slate-400 font-semibold uppercase block whitespace-normal break-words leading-tight">
+            Avg Latency
+          </span>
+          <div className="text-lg font-bold font-mono text-emerald-400 my-0.5 whitespace-normal break-words leading-tight flex items-baseline flex-wrap gap-1">
+            <span>
+              {metrics?.avg_latency_ms !== null && metrics?.avg_latency_ms !== undefined
+                ? metrics.avg_latency_ms
+                : 'N/A'}
+            </span>
+            {metrics?.avg_latency_ms !== null && metrics?.avg_latency_ms !== undefined && (
+              <span className="text-[10px] font-sans text-slate-500 font-normal">ms</span>
+            )}
           </div>
-          <span className="text-[10px] text-slate-500">
-            p95: {metrics?.p95_latency_ms ? `${metrics.p95_latency_ms}ms` : 'N/A'}
+          <span className="text-[10px] text-slate-500 whitespace-normal break-words leading-tight">
+            p95: {metrics?.p95_latency_ms ? `${metrics.p95_latency_ms} ms` : 'N/A'}
           </span>
         </div>
 
         {/* Committed / Submitted */}
-        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700">
-          <span className="text-[10px] text-slate-400 font-semibold uppercase block">Tx Commitment</span>
-          <div className="text-lg font-bold font-mono text-purple-400 my-0.5">
-            {metrics?.total_committed ?? 0}
-            <span className="text-xs text-slate-500 font-normal"> / {metrics?.total_submitted ?? 0}</span>
+        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700 min-w-0 flex flex-col justify-between">
+          <span className="text-[10px] text-slate-400 font-semibold uppercase block whitespace-normal break-words leading-tight">
+            Tx Commitment
+          </span>
+          <div className="text-lg font-bold font-mono text-purple-400 my-0.5 whitespace-normal break-words leading-tight flex items-baseline flex-wrap gap-1">
+            <span>{metrics?.total_committed ?? 0}</span>
+            <span className="text-xs text-slate-500 font-normal">/ {metrics?.total_submitted ?? 0}</span>
           </div>
-          <span className="text-[10px] text-slate-500">
+          <span className="text-[10px] text-slate-500 whitespace-normal break-words leading-tight">
             Pending: {metrics?.total_pending ?? 0}
           </span>
         </div>
 
         {/* Packet Drops */}
-        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700">
-          <span className="text-[10px] text-slate-400 font-semibold uppercase block">Message Drops</span>
-          <div className="text-lg font-bold font-mono text-rose-400 my-0.5">
+        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700 min-w-0 flex flex-col justify-between">
+          <span className="text-[10px] text-slate-400 font-semibold uppercase block whitespace-normal break-words leading-tight">
+            Message Drops
+          </span>
+          <div className="text-lg font-bold font-mono text-rose-400 my-0.5 whitespace-normal break-words leading-tight">
             {metrics?.total_messages_dropped ?? 0}
           </div>
-          <span className="text-[10px] text-slate-500">
+          <span className="text-[10px] text-slate-500 whitespace-normal break-words leading-tight">
             Drop rate: {((metrics?.message_drop_rate ?? 0) * 100).toFixed(1)}%
           </span>
         </div>
 
         {/* Recovery Duration */}
-        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700">
-          <span className="text-[10px] text-slate-400 font-semibold uppercase block">Last Recovery Time</span>
-          <div className="text-lg font-bold font-mono text-amber-400 my-0.5">
-            {metrics?.recovery_time_last_sec !== null && metrics?.recovery_time_last_sec !== undefined
-              ? `${metrics.recovery_time_last_sec} s`
-              : 'Nominal'}
+        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700 min-w-0 flex flex-col justify-between">
+          <span className="text-[10px] text-slate-400 font-semibold uppercase block whitespace-normal break-words leading-tight">
+            Last Recovery Time
+          </span>
+          <div className="text-lg font-bold font-mono text-amber-400 my-0.5 whitespace-normal break-words leading-tight flex items-baseline flex-wrap gap-1">
+            <span>
+              {metrics?.recovery_time_last_sec !== null && metrics?.recovery_time_last_sec !== undefined
+                ? metrics.recovery_time_last_sec
+                : 'Nominal'}
+            </span>
+            {metrics?.recovery_time_last_sec !== null && metrics?.recovery_time_last_sec !== undefined && (
+              <span className="text-[10px] font-sans text-slate-500 font-normal">sec</span>
+            )}
           </div>
-          <span className="text-[10px] text-slate-500">Failover / healing sync</span>
+          <span className="text-[10px] text-slate-500 whitespace-normal break-words leading-tight">
+            Failover / healing sync
+          </span>
         </div>
 
         {/* Consistency Score */}
-        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700">
-          <span className="text-[10px] text-slate-400 font-semibold uppercase block">Ledger Consistency</span>
-          <div className="text-lg font-bold font-mono text-emerald-400 my-0.5">
+        <div className="p-3 rounded-lg bg-dark-900/70 border border-dark-700 min-w-0 flex flex-col justify-between">
+          <span className="text-[10px] text-slate-400 font-semibold uppercase block whitespace-normal break-words leading-tight">
+            Ledger Consistency
+          </span>
+          <div className="text-lg font-bold font-mono text-emerald-400 my-0.5 whitespace-normal break-words leading-tight">
             {metrics?.consistency_percentage ?? 100}%
           </div>
-          <span className="text-[10px] text-slate-500">Prefix match verified</span>
+          <span className="text-[10px] text-slate-500 whitespace-normal break-words leading-tight">
+            Prefix match verified
+          </span>
         </div>
       </div>
 

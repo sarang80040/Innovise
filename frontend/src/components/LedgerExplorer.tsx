@@ -13,6 +13,13 @@ import {
   ShieldCheck,
   Search,
   Copy,
+  Eye,
+  X,
+  ExternalLink,
+  FileText,
+  Info,
+  Calendar,
+  Hash,
 } from 'lucide-react';
 import { LedgerConsistency, LogEntry, ValidatorState } from '../types';
 import { api } from '../services/api';
@@ -38,6 +45,11 @@ export const LedgerExplorer: React.FC<LedgerExplorerProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedTxId, setCopiedTxId] = useState<string | null>(null);
+  const [selectedTxDetail, setSelectedTxDetail] = useState<LogEntry | null>(null);
+
+  const selectedVal = validators.find((v) => v.validator_id === selectedValidatorId);
+  const logLength = selectedVal?.log_length ?? 0;
+  const commitIndex = selectedVal?.commit_index ?? 0;
 
   const handleCopyTx = (txId: string) => {
     navigator.clipboard.writeText(txId);
@@ -47,29 +59,36 @@ export const LedgerExplorer: React.FC<LedgerExplorerProps> = ({
     }, 2000);
   };
 
-  // Fetch log for selected validator
+  // Fetch log for selected validator with live polling & dependency triggers
   useEffect(() => {
     let isMounted = true;
     const fetchLog = async () => {
-      setLoading(true);
       try {
         const entries = await api.getValidatorLedger(selectedValidatorId);
-        if (isMounted) setLogs(entries);
+        if (isMounted) {
+          setLogs(entries);
+        }
       } catch (e) {
         console.error('Failed fetching ledger:', e);
       } finally {
         if (isMounted) setLoading(false);
       }
     };
+
     fetchLog();
+    // Live polling every 1.5s so logs are always fresh even if no prop changes
+    const timer = setInterval(fetchLog, 1500);
+
     return () => {
       isMounted = false;
+      clearInterval(timer);
     };
-  }, [selectedValidatorId]);
+  }, [selectedValidatorId, logLength, commitIndex, consistency?.highest_commit_index]);
 
   // Fetch logs for all validators for compare tab
   useEffect(() => {
     if (activeTab === 'compare') {
+      let isMounted = true;
       const fetchAll = async () => {
         const map: Record<string, LogEntry[]> = {};
         await Promise.all(
@@ -81,18 +100,65 @@ export const LedgerExplorer: React.FC<LedgerExplorerProps> = ({
             }
           })
         );
-        setAllLogs(map);
+        if (isMounted) setAllLogs(map);
       };
-      fetchAll();
-    }
-  }, [activeTab, validators]);
 
-  const selectedVal = validators.find((v) => v.validator_id === selectedValidatorId);
+      fetchAll();
+      const timer = setInterval(fetchAll, 2000);
+      return () => {
+        isMounted = false;
+        clearInterval(timer);
+      };
+    }
+  }, [activeTab, validators, consistency?.highest_commit_index]);
 
   // Find validator status from consistency summary
   const summary = consistency?.validator_summaries.find(
     (s) => s.validator_id === selectedValidatorId
   );
+
+  const renderPayloadPreview = (payload: any) => {
+    if (!payload) return <span className="text-slate-500 text-xs">-</span>;
+    if (typeof payload === 'string') {
+      return (
+        <span className="font-sans text-slate-200 text-xs break-words" title={payload}>
+          {payload}
+        </span>
+      );
+    }
+    if (typeof payload === 'object') {
+      const action = payload.action || (payload.type ? payload.type : null);
+      return (
+        <div className="flex items-center gap-1.5 flex-wrap font-sans text-xs">
+          {action && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 font-mono">
+              {action}
+            </span>
+          )}
+          {payload.amount !== undefined && (
+            <span className="text-emerald-300 font-mono font-semibold">
+              {typeof payload.amount === 'number' ? payload.amount.toLocaleString() : payload.amount} tokens
+            </span>
+          )}
+          {payload.validator && (
+            <span className="text-slate-400 text-[11px]">({payload.validator})</span>
+          )}
+          {payload.contract && (
+            <span className="text-purple-300 font-mono text-[10px] truncate max-w-[130px]" title={payload.contract}>
+              {payload.contract}
+            </span>
+          )}
+          {payload.proposal_id && (
+            <span className="text-amber-300 text-[11px]">Prop #{payload.proposal_id} ({payload.vote})</span>
+          )}
+          {payload.token_id && (
+            <span className="text-indigo-300 text-[11px]">Token #{payload.token_id}</span>
+          )}
+        </div>
+      );
+    }
+    return <span className="font-sans text-slate-200 text-xs">{String(payload)}</span>;
+  };
 
   return (
     <div className="bg-dark-800/80 border border-dark-700 rounded-xl p-5 shadow-lg backdrop-blur-sm">
@@ -308,10 +374,12 @@ export const LedgerExplorer: React.FC<LedgerExplorerProps> = ({
           {/* Node Summary Stats Bar */}
           {selectedVal && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 rounded-lg bg-dark-900/60 border border-dark-700 text-xs">
-              <div>
-                <span className="text-slate-400 text-[10px] block">Synchronization Status</span>
+              <div className="min-w-0 flex flex-col justify-between">
+                <span className="text-slate-400 text-[10px] block whitespace-normal break-words leading-tight">
+                  Synchronization Status
+                </span>
                 <span
-                  className={`font-bold font-mono text-xs ${
+                  className={`font-bold font-mono text-xs whitespace-normal break-words leading-tight mt-1 ${
                     summary?.status === 'SYNCHRONIZED'
                       ? 'text-emerald-400'
                       : summary?.status === 'LAGGING'
@@ -326,21 +394,27 @@ export const LedgerExplorer: React.FC<LedgerExplorerProps> = ({
                     : summary?.status || (selectedVal.is_online ? 'SYNCED' : 'OFFLINE')}
                 </span>
               </div>
-              <div>
-                <span className="text-slate-400 text-[10px] block">Commit Index</span>
-                <span className="font-bold font-mono text-emerald-400 text-sm">
+              <div className="min-w-0 flex flex-col justify-between">
+                <span className="text-slate-400 text-[10px] block whitespace-normal break-words leading-tight">
+                  Commit Index
+                </span>
+                <span className="font-bold font-mono text-emerald-400 text-sm whitespace-normal break-words leading-tight mt-1">
                   {selectedVal.commit_index}
                 </span>
               </div>
-              <div>
-                <span className="text-slate-400 text-[10px] block">Last Applied Index</span>
-                <span className="font-bold font-mono text-cyan-400 text-sm">
+              <div className="min-w-0 flex flex-col justify-between">
+                <span className="text-slate-400 text-[10px] block whitespace-normal break-words leading-tight">
+                  Last Applied Index
+                </span>
+                <span className="font-bold font-mono text-cyan-400 text-sm whitespace-normal break-words leading-tight mt-1">
                   {selectedVal.last_applied}
                 </span>
               </div>
-              <div>
-                <span className="text-slate-400 text-[10px] block">Total Log Entries</span>
-                <span className="font-bold font-mono text-slate-200 text-sm">
+              <div className="min-w-0 flex flex-col justify-between">
+                <span className="text-slate-400 text-[10px] block whitespace-normal break-words leading-tight">
+                  Total Log Entries
+                </span>
+                <span className="font-bold font-mono text-slate-200 text-sm whitespace-normal break-words leading-tight mt-1">
                   {selectedVal.log_length}
                 </span>
               </div>
@@ -349,15 +423,25 @@ export const LedgerExplorer: React.FC<LedgerExplorerProps> = ({
 
           {/* Search bar & Invariant Notice */}
           <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Filter entries in log..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-dark-900 border border-dark-700 rounded-lg pl-8 pr-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono w-52"
-              />
+            <div className="relative flex items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Filter entries in log..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-dark-900 border border-dark-700 rounded-lg pl-8 pr-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono w-56"
+                />
+              </div>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="text-xs text-slate-400 hover:text-white px-2 py-0.5 rounded bg-dark-800 border border-dark-700"
+                >
+                  Clear
+                </button>
+              )}
             </div>
             <span className="text-[11px] text-slate-400 font-sans">
               Entries ≤ Commit Index ({selectedVal?.commit_index ?? 0}) are immutable and quorum-verified.
@@ -365,7 +449,7 @@ export const LedgerExplorer: React.FC<LedgerExplorerProps> = ({
           </div>
 
           {/* Log Table */}
-          <div className="overflow-x-auto rounded-lg border border-dark-700 bg-dark-900/60 max-h-72 overflow-y-auto">
+          <div className="overflow-x-auto rounded-lg border border-dark-700 bg-dark-900/60 max-h-80 overflow-y-auto">
             <table className="w-full text-left text-xs text-slate-300">
               <thead className="bg-dark-800 text-[11px] uppercase tracking-wider text-slate-400 sticky top-0 border-b border-dark-700">
                 <tr>
@@ -373,106 +457,140 @@ export const LedgerExplorer: React.FC<LedgerExplorerProps> = ({
                   <th className="py-2.5 px-3">Term</th>
                   <th className="py-2.5 px-3">Tx ID</th>
                   <th className="py-2.5 px-3">Payload Data</th>
-                  <th className="py-2.5 px-3 text-right">Commit State</th>
+                  <th className="py-2.5 px-3">Commit State</th>
+                  <th className="py-2.5 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-700/60 font-mono">
                 {logs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-6 text-slate-500 font-sans text-xs">
-                      No transaction entries present in {selectedValidatorId}'s local log yet.
+                    <td colSpan={6} className="text-center py-8 text-slate-500 font-sans text-xs">
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <Server className="w-5 h-5 text-slate-600" />
+                        <span>No transaction entries present in {selectedValidatorId}'s local log yet.</span>
+                        <span className="text-[11px] text-slate-600">Submit transactions using the controls above to replicate consensus entries.</span>
+                      </div>
                     </td>
                   </tr>
-                ) : (
-                  logs
-                    .filter((entry) => {
-                      if (!searchQuery.trim()) return true;
-                      const q = searchQuery.toLowerCase();
-                      const payloadStr =
-                        typeof entry.payload === 'object'
-                          ? JSON.stringify(entry.payload)
-                          : String(entry.payload);
-                      return (
-                        entry.tx_id.toLowerCase().includes(q) ||
-                        payloadStr.toLowerCase().includes(q) ||
-                        String(entry.index).includes(q) ||
-                        String(entry.term).includes(q)
-                      );
-                    })
-                    .map((entry) => {
-                      const isCommitted = entry.index <= (selectedVal?.commit_index ?? 0);
-                      const isFork =
-                        !isCommitted &&
-                        (selectedVal?.is_malicious ||
-                          (entry.payload &&
-                            typeof entry.payload === 'object' &&
-                            ((entry.payload as any)?.action === 'DOUBLE_SPEND_ATTACK' ||
-                              'DOUBLE_SPEND_ATTACK' in entry.payload ||
-                              'conflict_note' in entry.payload ||
-                              'MALICIOUS_FORK' in entry.payload)));
-                      const isCopied = copiedTxId === entry.tx_id;
-                      return (
-                        <tr
-                          key={entry.index}
-                          className={`hover:bg-dark-800/50 transition-colors ${
-                            isFork
-                              ? 'bg-rose-950/25 border-l-2 border-rose-500'
-                              : isCommitted
-                              ? ''
-                              : 'bg-amber-950/10'
-                          }`}
-                        >
-                          <td className="py-2.5 px-3 font-bold text-slate-100">#{entry.index}</td>
-                          <td className="py-2.5 px-3 text-cyan-400">Term {entry.term}</td>
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className={`font-mono ${
-                                  isFork ? 'text-rose-400 font-bold' : 'text-slate-300'
-                                }`}
-                              >
-                                {entry.tx_id}
-                              </span>
-                              <button
-                                onClick={() => handleCopyTx(entry.tx_id)}
-                                className="p-0.5 rounded text-slate-400 hover:text-white transition-colors"
-                                title="Copy Tx ID"
-                              >
-                                {isCopied ? (
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                ) : (
-                                  <Copy className="w-3 h-3 text-slate-500 hover:text-slate-300" />
-                                )}
-                              </button>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 font-sans text-slate-200 truncate max-w-xs">
-                            {typeof entry.payload === 'object'
-                              ? JSON.stringify(entry.payload)
-                              : String(entry.payload)}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-sans">
-                            {isFork ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-400">
-                                <AlertTriangle className="w-3 h-3 text-rose-400" />
-                                MALICIOUS FORK (UNCOMMITTED)
-                              </span>
-                            ) : isCommitted ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                COMMITTED
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400">
-                                <Clock className="w-3 h-3 text-amber-400" />
-                                UNCOMMITTED SUFFIX
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                )}
+                ) : (() => {
+                  const filteredLogs = logs.filter((entry) => {
+                    if (!searchQuery.trim()) return true;
+                    const q = searchQuery.toLowerCase().trim();
+                    const payloadStr =
+                      typeof entry.payload === 'object'
+                        ? JSON.stringify(entry.payload).toLowerCase()
+                        : String(entry.payload).toLowerCase();
+                    return (
+                      entry.tx_id.toLowerCase().includes(q) ||
+                      payloadStr.includes(q) ||
+                      String(entry.index).includes(q) ||
+                      String(entry.term).includes(q)
+                    );
+                  });
+
+                  if (filteredLogs.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} className="text-center py-8 text-slate-400 font-sans text-xs">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Search className="w-5 h-5 text-slate-500" />
+                            <span className="font-semibold text-slate-200">
+                              No transactions matching "{searchQuery}" found in {selectedValidatorId}'s log ({logs.length} total entries).
+                            </span>
+                            <button
+                              onClick={() => setSearchQuery('')}
+                              className="px-3 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-600 text-xs text-cyan-400 font-medium transition-all"
+                            >
+                              Clear Search Filter
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return filteredLogs.map((entry) => {
+                    const isCommitted = entry.index <= (selectedVal?.commit_index ?? 0);
+                    const isFork =
+                      !isCommitted &&
+                      (selectedVal?.is_malicious ||
+                        (entry.payload &&
+                          typeof entry.payload === 'object' &&
+                          ((entry.payload as any)?.action === 'DOUBLE_SPEND_ATTACK' ||
+                            'DOUBLE_SPEND_ATTACK' in entry.payload ||
+                            'conflict_note' in entry.payload ||
+                            'MALICIOUS_FORK' in entry.payload)));
+                    const isCopied = copiedTxId === entry.tx_id;
+                    return (
+                      <tr
+                        key={entry.index}
+                        onClick={() => setSelectedTxDetail(entry)}
+                        className={`hover:bg-dark-800/80 cursor-pointer transition-colors ${
+                          isFork
+                            ? 'bg-rose-950/25 border-l-2 border-rose-500'
+                            : isCommitted
+                            ? ''
+                            : 'bg-amber-950/10'
+                        }`}
+                      >
+                        <td className="py-2.5 px-3 font-bold text-slate-100">#{entry.index}</td>
+                        <td className="py-2.5 px-3 text-cyan-400">Term {entry.term}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <span
+                              className={`font-mono ${
+                                isFork ? 'text-rose-400 font-bold' : 'text-slate-200 font-medium'
+                              }`}
+                            >
+                              {entry.tx_id}
+                            </span>
+                            <button
+                              onClick={() => handleCopyTx(entry.tx_id)}
+                              className="p-1 rounded text-slate-400 hover:text-white hover:bg-dark-700 transition-colors"
+                              title="Copy Tx ID"
+                            >
+                              {isCopied ? (
+                                <Check className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3 h-3 text-slate-500 hover:text-slate-300" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {renderPayloadPreview(entry.payload)}
+                        </td>
+                        <td className="py-2.5 px-3 font-sans">
+                          {isFork ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-400">
+                              <AlertTriangle className="w-3 h-3 text-rose-400" />
+                              MALICIOUS FORK
+                            </span>
+                          ) : isCommitted ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              COMMITTED
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400">
+                              <Clock className="w-3 h-3 text-amber-400" />
+                              UNCOMMITTED SUFFIX
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => setSelectedTxDetail(entry)}
+                            className="px-2.5 py-1 rounded bg-dark-800 hover:bg-dark-700 border border-dark-600 hover:border-cyan-500/60 text-slate-300 hover:text-cyan-300 text-[11px] font-sans font-medium transition-all inline-flex items-center gap-1 shadow-sm"
+                          >
+                            <Eye className="w-3 h-3 text-cyan-400" />
+                            <span>Details</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
@@ -579,6 +697,144 @@ export const LedgerExplorer: React.FC<LedgerExplorerProps> = ({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction & Log Entry Detail Inspector Modal */}
+      {selectedTxDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-dark-800 border border-dark-700 rounded-xl p-6 max-w-xl w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-dark-700 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-brand-blue/20 border border-brand-blue/40 text-brand-blue">
+                  <FileText className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    Transaction & Log Entry Details
+                  </h3>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Validator: <strong className="text-cyan-400">{selectedValidatorId}</strong> • Log Index: #{selectedTxDetail.index}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTxDetail(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-dark-700 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Core Badges Row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+              <div className="p-2.5 rounded-lg bg-dark-900 border border-dark-700">
+                <span className="text-[10px] text-slate-400 block uppercase font-semibold">Log Index</span>
+                <span className="text-base font-bold font-mono text-white">#{selectedTxDetail.index}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-dark-900 border border-dark-700">
+                <span className="text-[10px] text-slate-400 block uppercase font-semibold">Raft Term</span>
+                <span className="text-base font-bold font-mono text-cyan-400">Term {selectedTxDetail.term}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-dark-900 border border-dark-700">
+                <span className="text-[10px] text-slate-400 block uppercase font-semibold">Commit State</span>
+                <span className={`text-xs font-bold block mt-1 ${
+                  selectedTxDetail.index <= (selectedVal?.commit_index ?? 0)
+                    ? 'text-emerald-400'
+                    : 'text-amber-400'
+                }`}>
+                  {selectedTxDetail.index <= (selectedVal?.commit_index ?? 0)
+                    ? 'COMMITTED (Safe)'
+                    : 'UNCOMMITTED SUFFIX'}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-dark-900 border border-dark-700">
+                <span className="text-[10px] text-slate-400 block uppercase font-semibold">Node Role</span>
+                <span className="text-xs font-bold font-mono text-purple-400 block mt-1">
+                  {selectedVal?.role}
+                </span>
+              </div>
+            </div>
+
+            {/* Tx ID Box */}
+            <div className="p-3 rounded-lg bg-dark-900 border border-dark-700 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Transaction Hash (ID)</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-sm text-cyan-300 font-bold select-all break-all">
+                  {selectedTxDetail.tx_id}
+                </span>
+                <button
+                  onClick={() => handleCopyTx(selectedTxDetail.tx_id)}
+                  className="px-2.5 py-1 rounded bg-dark-800 hover:bg-dark-700 border border-dark-600 text-xs text-slate-300 flex items-center gap-1.5 transition-colors shrink-0"
+                >
+                  {copiedTxId === selectedTxDetail.tx_id ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Copy ID</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Structured Payload Breakdown */}
+            <div className="p-3.5 rounded-lg bg-dark-900 border border-dark-700 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-amber-400" />
+                  Decentralized Transaction Payload
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  {typeof selectedTxDetail.payload === 'object' ? 'Structured Object' : 'String Payload'}
+                </span>
+              </div>
+
+              {typeof selectedTxDetail.payload === 'object' && selectedTxDetail.payload !== null ? (
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {Object.entries(selectedTxDetail.payload).map(([k, v]) => (
+                    <div key={k} className="p-2 rounded bg-dark-800 border border-dark-700">
+                      <span className="text-[10px] text-slate-400 font-mono block uppercase">{k}:</span>
+                      <span className="font-mono text-xs font-semibold text-slate-100 break-words">
+                        {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-2.5 rounded bg-dark-800 border border-dark-700 font-mono text-xs text-slate-200 break-words">
+                  {String(selectedTxDetail.payload)}
+                </div>
+              )}
+
+              {/* Raw JSON viewer */}
+              <div className="pt-1">
+                <span className="text-[10px] text-slate-400 block mb-1">Raw JSON Data:</span>
+                <pre className="p-2.5 rounded bg-dark-950 border border-dark-700 text-[11px] text-emerald-400 font-mono overflow-x-auto max-h-36">
+                  {JSON.stringify(selectedTxDetail.payload, null, 2)}
+                </pre>
+              </div>
+            </div>
+
+            {/* Timestamp & Footer */}
+            <div className="flex items-center justify-between text-xs text-slate-400 pt-1 font-mono">
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                Logged at: {selectedTxDetail.timestamp ? new Date(selectedTxDetail.timestamp * 1000).toLocaleTimeString() : 'Genesis'}
+              </span>
+              <button
+                onClick={() => setSelectedTxDetail(null)}
+                className="px-4 py-1.5 rounded-lg bg-dark-700 hover:bg-dark-600 text-slate-200 text-xs font-semibold transition-colors"
+              >
+                Close Inspector
+              </button>
+            </div>
           </div>
         </div>
       )}

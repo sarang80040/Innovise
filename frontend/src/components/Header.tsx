@@ -30,6 +30,26 @@ export const Header: React.FC<HeaderProps> = ({
   const [resetting, setResetting] = useState(false);
   const [healing, setHealing] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [headerBatchCount, setHeaderBatchCount] = useState<number>(10);
+  const [simulatingBatch, setSimulatingBatch] = useState<boolean>(false);
+  const [headerFeedback, setHeaderFeedback] = useState<string | null>(null);
+
+  const handleHeaderSimulateBatch = async () => {
+    if (headerBatchCount < 1 || headerBatchCount > 100) return;
+    setSimulatingBatch(true);
+    setHeaderFeedback(`Dispatching ${headerBatchCount}...`);
+    try {
+      const res = await api.submitBatchTransactions(headerBatchCount);
+      setHeaderFeedback(`✓ ${res.submitted} Tx`);
+      onRefresh();
+      setTimeout(() => setHeaderFeedback(null), 3500);
+    } catch (e: any) {
+      setHeaderFeedback('Failed');
+      setTimeout(() => setHeaderFeedback(null), 3500);
+    } finally {
+      setSimulatingBatch(false);
+    }
+  };
 
   const handleReset = async () => {
     if (confirm('Reset cluster to initial genesis state (Term 0, 5 honest followers)?')) {
@@ -151,10 +171,41 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onOpenTxModal}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-blue hover:bg-blue-600 text-white transition-all shadow-md shadow-brand-blue/20"
+            title="Open manual transaction submission dialog"
           >
             <PlusCircle className="w-3.5 h-3.5" />
-            <span>Submit Tx</span>
+            <span>Manual Tx</span>
           </button>
+
+          {/* Quick Simultaneous Batch Simulator (1-100) in Header */}
+          <div className="flex items-center gap-1.5 bg-dark-900 border border-brand-blue/40 rounded-lg p-1 shadow-inner">
+            <span className="text-[11px] text-slate-300 font-semibold px-1 hidden lg:inline flex items-center gap-1">
+              <Zap className="w-3 h-3 text-cyan-400" />
+              Simulate:
+            </span>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={headerBatchCount}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                setHeaderBatchCount(isNaN(v) ? 1 : Math.max(1, Math.min(100, v)));
+              }}
+              title="Number of transactions to simulate simultaneously (1-100)"
+              className="w-11 bg-dark-800 border border-dark-600 rounded px-1 py-0.5 text-xs text-center text-white font-mono font-bold focus:outline-none focus:border-brand-blue"
+            />
+            <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">Tx</span>
+            <button
+              onClick={handleHeaderSimulateBatch}
+              disabled={simulatingBatch}
+              title="Simulate simultaneous transactions with auto-generated IDs and details"
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow transition-all disabled:opacity-50"
+            >
+              <Zap className={`w-3 h-3 ${simulatingBatch ? 'animate-spin' : 'text-cyan-300'}`} />
+              <span>{simulatingBatch ? 'Simulating...' : headerFeedback || `Simulate (1-100)`}</span>
+            </button>
+          </div>
 
           {/* Heal Network Button if partitioned */}
           {isPartitioned && (
